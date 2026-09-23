@@ -40,7 +40,24 @@ export interface SandboxDriver {
 }
 
 const MAX_OUTPUT = 64 * 1024;
-const TEST_ARGS = ['--test', '--test-isolation=none', 'test/server.test.js'];
+const TEST_FILE = 'test/server.test.js';
+
+/**
+ * Under Node's permission model the test runner must not spawn per-file child processes (that would
+ * need --allow-child-process), so it runs in-process. The flag was renamed in Node 23.
+ */
+export function inProcessTestFlag(nodeVersion = process.versions.node): string {
+  return Number(nodeVersion.split('.')[0]) >= 23 ? '--test-isolation=none' : '--experimental-test-isolation=none';
+}
+
+/** Remove a directory, retrying while Windows releases handles held by a just-exited child. */
+export function removeDir(dir: string) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  } catch {
+    /* best effort: a leftover temp directory must not fail the run */
+  }
+}
 
 function collect(child: ReturnType<typeof spawn>, timeoutMs: number, onTimeout: () => void): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve) => {
@@ -92,7 +109,8 @@ export class DockerSandbox implements SandboxDriver {
       '--user', '1000:1000',
       '-v', `${path.resolve(projectDir)}:/app:ro`, '-w', '/app',
       '-e', 'DATA_DIR=/tmp', '-e', 'NODE_ENV=test',
-      this.image, 'node', ...TEST_ARGS,
+      // The container is the isolation boundary, so the default runner mode works on any Node version.
+      this.image, 'node', '--test', TEST_FILE,
     ];
     const started = Date.now();
     const child = spawn('docker', args, { windowsHide: true });
@@ -127,13 +145,15 @@ export class ProcessSandbox implements SandboxDriver {
       `--allow-fs-read=${scratch}`,
       `--allow-fs-write=${scratch}`,
       `--max-old-space-size=${Math.max(64, limits.memoryMb)}`,
-      ...TEST_ARGS,
+      '--test',
+      inProcessTestFlag(),
+      TEST_FILE,
     ];
     const env: NodeJS.ProcessEnv = { DATA_DIR: scratch, NODE_ENV: 'test', PATH: process.env.PATH ?? '', SYSTEMROOT: process.env.SYSTEMROOT ?? '', TEMP: scratch, TMP: scratch };
     const started = Date.now();
     const child = spawn(process.execPath, args, { cwd: dir, env, windowsHide: true });
     const r = await collect(child, limits.timeoutMs, () => child.kill('SIGKILL'));
-    rmSync(scratch, { recursive: true, force: true });
+    removeDir(scratch);
     return {
       driver: 'process',
       status: r.timedOut ? 'timeout' : r.code === 0 ? 'passed' : 'failed',

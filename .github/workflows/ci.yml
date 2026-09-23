@@ -1,0 +1,121 @@
+# Continuous integration: every push to main and every pull request.
+#
+#   test       typecheck + unit/integration/e2e tests (embedded PGlite) on Linux (Node 22 & 24) and Windows
+#   postgres   integration + e2e tests against a real PostgreSQL 17 server
+#   dashboard  production build of the Next.js dashboard
+#   audit      npm audit (fails on high/critical advisories)
+#   docker     builds the api, worker and dashboard images (not pushed)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  FORCE_COLOR: '1'
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 22 }
+          - { os: ubuntu-latest, node: 24 }
+          - { os: windows-latest, node: 24 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+
+  postgres:
+    name: Test (PostgreSQL 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: roos
+          POSTGRES_PASSWORD: roos
+          POSTGRES_DB: roos
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U roos -d roos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Each test core creates (and drops) its own database on this server.
+      TEST_DATABASE_URL: postgres://roos:roos@localhost:5432/roos
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run --project integration
+
+  dashboard:
+    name: Dashboard build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w @roos/dashboard
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm audit --audit-level=high
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [api, worker, dashboard]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          tags: roos-${{ matrix.target }}:ci
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

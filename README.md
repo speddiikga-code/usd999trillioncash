@@ -1,5 +1,8 @@
 # ROOS — Revenue Opportunity Operating System
 
+[![CI](https://github.com/speddiikga-code/usd999trillioncash/actions/workflows/ci.yml/badge.svg)](https://github.com/speddiikga-code/usd999trillioncash/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ROOS finds, validates, launches, measures and scales **legitimate** businesses. It gathers public
 evidence of real problems and scores each opportunity transparently. It then generates several
 business hypotheses, builds a runnable MVP, and runs a pre-registered experiment on it. The
@@ -119,6 +122,13 @@ npm run typecheck        # TypeScript across all packages
 npm test                 # unit + integration + end-to-end (no Docker or network needed)
 npm run build            # typecheck + production dashboard build
 ```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every push to `main` and every pull request:
+
+- typecheck and the full test suite on Linux (Node 22 and 24) and on Windows
+- the integration tests against a real PostgreSQL 17 server
+- the dashboard production build and a dependency audit
+- builds of the api, worker and dashboard Docker images
 
 ## License
 

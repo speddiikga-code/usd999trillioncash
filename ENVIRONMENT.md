@@ -147,4 +147,6 @@ Only these two paths produce **verified** revenue.
 ## Tests
 
 `TEST_DATABASE_URL` runs the integration suite against a real PostgreSQL server instead of
-in-memory PGlite. **Use a disposable database**: the tests drop and recreate its `public` schema.
+in-memory PGlite. Point it at a **disposable server** where the user may `CREATE DATABASE`: each test
+core gets its own throwaway database, dropped again when the test closes it. CI does this against
+a PostgreSQL 17 service container.

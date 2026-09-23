@@ -1,0 +1,77 @@
+# Production-style single-host deployment (behind Caddy for automatic HTTPS).
+#   cp .env.example .env.production   # fill APP_SECRET, ENCRYPTION_KEY, domains, keys
+#   docker compose -f infrastructure/deployment/docker-compose.prod.yml --env-file .env.production up -d --build
+# See docs/DEPLOYMENT.md for the full checklist.
+name: roos-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-roos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-roos}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-roos}"], interval: 5s, retries: 20 }
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    volumes: [redisdata:/data]
+    restart: always
+
+  api:
+    build: { context: ../.., dockerfile: infrastructure/docker/Dockerfile, target: api }
+    env_file: ${ENV_FILE:-../../.env.production}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-roos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roos}
+      DB_FALLBACK: none
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      API_HOST: 0.0.0.0
+      TRUST_PROXY: "true"
+      COOKIE_SECURE: "true"
+      ALLOW_REGISTRATION: "false"
+      SEED_DEMO: ${SEED_DEMO:-true}
+    volumes: [projects:/app/data/projects]
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: always
+
+  worker:
+    build: { context: ../.., dockerfile: infrastructure/docker/Dockerfile, target: worker }
+    env_file: ${ENV_FILE:-../../.env.production}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-roos}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-roos}
+      DB_FALLBACK: none
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    volumes: [projects:/app/data/projects]
+    depends_on: [api]
+    deploy: { replicas: 1 }
+    restart: always
+
+  dashboard:
+    build: { context: ../.., dockerfile: infrastructure/docker/Dockerfile, target: dashboard }
+    environment:
+      NODE_ENV: production
+      ROOS_API_INTERNAL_URL: http://api:4000
+    depends_on: [api]
+    restart: always
+
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      ROOS_DOMAIN: ${ROOS_DOMAIN:?set ROOS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on: [dashboard, api]
+    restart: always
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  projects: {}
+  caddydata: {}

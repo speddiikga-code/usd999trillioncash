@@ -1,0 +1,43 @@
+{
+  "name": "roos",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ROOS — Revenue Opportunity Operating System. Discover, validate, launch, measure and scale legitimate revenue opportunities with human approval gates.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm run dev -w @roos/api",
+    "dev:worker": "npm run dev -w @roos/worker",
+    "dev:dashboard": "npm run dev -w @roos/dashboard",
+    "start": "node scripts/dev.mjs --prod",
+    "db:migrate": "tsx packages/database/src/cli.ts migrate",
+    "db:status": "tsx packages/database/src/cli.ts status",
+    "db:seed-demo": "tsx packages/core/src/cli.ts seed-demo",
+    "bootstrap:admin": "tsx packages/core/src/cli.ts bootstrap-admin",
+    "admin": "tsx packages/core/src/cli.ts",
+    "roos": "tsx apps/cli/src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && npm run build -w @roos/dashboard",
+    "audit:deps": "npm audit --audit-level=high",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,101 @@
+# Local development infrastructure:
+#   docker compose up -d                      → PostgreSQL + Redis (then: npm install && npm run dev)
+#   docker compose --profile app up --build   → the whole stack in containers (API, worker, dashboard)
+name: roos
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: roos
+      POSTGRES_PASSWORD: roos
+      POSTGRES_DB: roos
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roos -d roos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # ── Full containerised stack (opt-in: --profile app) ─────────────────────────
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: api
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://roos:roos@postgres:5432/roos
+      DB_FALLBACK: none
+      REDIS_URL: redis://redis:6379
+      API_HOST: 0.0.0.0
+      # Generated code is not executed in this profile unless you opt in: SANDBOX_DRIVER=docker
+      # also requires mounting the Docker socket (root-equivalent access — understand the risk).
+      SANDBOX_DRIVER: disabled
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - projects:/app/data/projects
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: worker
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://roos:roos@postgres:5432/roos
+      DB_FALLBACK: none
+      REDIS_URL: redis://redis:6379
+      SANDBOX_DRIVER: disabled
+    volumes:
+      - projects:/app/data/projects
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  dashboard:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: dashboard
+    environment:
+      NODE_ENV: production
+      ROOS_API_INTERNAL_URL: http://api:4000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  projects: {}

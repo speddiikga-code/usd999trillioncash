@@ -1,0 +1,23 @@
+{
+  "name": "@roos/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.ts",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@roos/agents": "*",
+    "@roos/connectors": "*",
+    "@roos/core": "*",
+    "@roos/security": "*",
+    "@roos/shared": "*",
+    "fastify": "^5.12.5"
+  }
+}

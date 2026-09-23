@@ -1,0 +1,12 @@
+{
+  "name": "@roos/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "roos": "./src/main.ts"
+  },
+  "dependencies": {
+    "@roos/shared": "*"
+  }
+}

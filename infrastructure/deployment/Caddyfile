@@ -1,0 +1,17 @@
+{$ROOS_DOMAIN} {
+	encode gzip
+	# Public API endpoints (tracking, webhooks, unsubscribe) and the authenticated API
+	handle /api/* {
+		reverse_proxy api:4000 {
+			flush_interval -1
+		}
+	}
+	# Dashboard
+	handle {
+		reverse_proxy dashboard:3000
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

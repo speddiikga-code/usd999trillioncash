@@ -119,3 +119,7 @@ npm run typecheck        # TypeScript across all packages
 npm test                 # unit + integration + end-to-end (no Docker or network needed)
 npm run build            # typecheck + production dashboard build
 ```
+
+## License
+
+[MIT](LICENSE): free to use, modify and distribute, including commercially.

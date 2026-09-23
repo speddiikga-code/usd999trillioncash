@@ -2,6 +2,7 @@
   "name": "roos",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "description": "ROOS — Revenue Opportunity Operating System. Discover, validate, launch, measure and scale legitimate revenue opportunities with human approval gates.",
   "type": "module",
   "workspaces": [

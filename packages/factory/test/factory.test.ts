@@ -1,13 +1,14 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { scanSources } from '@roos/security';
 import type { BusinessHypothesis } from '@roos/shared';
-import { buildSpec, generateProject, LocalDeployer, normalizeEntities, ProcessSandbox, writeProject } from '../src';
+import { buildSpec, generateProject, inProcessTestFlag, LocalDeployer, normalizeEntities, ProcessSandbox, removeDir, writeProject } from '../src';
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'roos-factory-test-'));
-afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => removeDir(tmp));
 
 const hypothesis = {
   id: 'hyp_test',
@@ -73,6 +74,19 @@ describe('MVP factory', () => {
 
   it('refuses to write outside the project directory', () => {
     expect(() => writeProject(path.join(tmp, 'x'), [{ path: '../escape.txt', content: 'x' }])).toThrow(/outside/);
+  });
+
+  it("passes its own `npm test` outside the sandbox on this Node version", () => {
+    const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.scripts.test).toBe('node --test test/server.test.js');
+    const out = execFileSync(process.execPath, ['--test', 'test/server.test.js'], { cwd: dir, encoding: 'utf8', env: { ...process.env, DATA_DIR: path.join(tmp, 'npm-test-data') } });
+    expect(out).toMatch(/fail 0/);
+  });
+
+  it('uses the in-process test-runner flag that the running Node version understands', () => {
+    expect(inProcessTestFlag('22.23.2')).toBe('--experimental-test-isolation=none');
+    expect(inProcessTestFlag('23.6.0')).toBe('--test-isolation=none');
+    expect(inProcessTestFlag('24.21.0')).toBe('--test-isolation=none');
   });
 
   it('runs its own test-suite inside the process sandbox', async () => {
